@@ -337,7 +337,7 @@ let popupType='',popupId=0;
 const stMap={planned:['예정','s-planned'],done:['완료','s-done'],pending:['보류','s-pending'],cancel:['취소','s-cancel']};
 
 // ── Google Sheets 연동 ──
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzeB7f8DTBA4DsdUJGEYs0bQSFgRXdQOLMymIS-YWDCP9zovPeRV9VvdZMy0TWmt_z5nA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzPe2l6L_9kxGfQEuvMZY5fwJdNp4BC9zlCdnzxGCatwyUO1jqT36f9igt9YG4eROgCkA/exec';
 let isSaving = false;
 let pollTimer = null;
 
@@ -395,18 +395,44 @@ async function saveData() {
 
 async function loadData() {
   setSyncStatus('loading');
-  try {
-    const res = await fetch(GAS_URL + '?t=' + Date.now());
-    const raw = await res.text();
-    const parsed = JSON.parse(raw);
-    data   = parsed.data   || { joint:[], patrol:[], council:[] };
-    nextId = parsed.nextId || 1;
-    setSyncStatus('ok');
-    return true;
-  } catch(e) {
-    setSyncStatus('error');
-    return false;
-  }
+  return new Promise((resolve) => {
+    const callbackName = '_gasCallback_' + Date.now();
+    const script = document.createElement('script');
+
+    window[callbackName] = function(parsed) {
+      try {
+        data   = parsed.data   || { joint:[], patrol:[], council:[] };
+        nextId = parsed.nextId || 1;
+        setSyncStatus('ok');
+      } catch(e) {
+        setSyncStatus('error');
+      } finally {
+        delete window[callbackName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+        resolve();
+      }
+    };
+
+    script.onerror = function() {
+      setSyncStatus('error');
+      delete window[callbackName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve();
+    };
+
+    script.src = GAS_URL + '?callback=' + callbackName + '&t=' + Date.now();
+    document.head.appendChild(script);
+
+    // 10초 타임아웃
+    setTimeout(() => {
+      if (window[callbackName]) {
+        setSyncStatus('error');
+        delete window[callbackName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+        resolve();
+      }
+    }, 10000);
+  });
 }
 
 async function resetData() {
@@ -422,8 +448,8 @@ function startPolling() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
     if (isSaving) return;
-    const ok = await loadData();
-    if (ok) render();
+    await loadData();
+    render();
   }, 30000);
 }
 
