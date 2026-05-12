@@ -81,7 +81,7 @@
   .cal-dow{text-align:center;font-size:11px;font-weight:700;color:var(--g4);padding:4px 0 8px;}
   .cal-dow:first-child{color:#ef4444;}
   .cal-dow:last-child{color:var(--blue);}
-  .cal-cell{min-height:96px;border-radius:8px;padding:6px;background:var(--wh);border:1.5px solid transparent;transition:border-color .15s;}
+  .cal-cell{min-height:96px;height:auto;border-radius:8px;padding:6px;background:var(--wh);border:1.5px solid transparent;transition:border-color .15s;}
   .cal-cell:hover{border-color:var(--g2);}
   .cal-cell.other-month{background:var(--g1);}
   .cal-cell.today{border-color:var(--orange)!important;}
@@ -547,7 +547,7 @@ function renderCalendar(){
 
     const dayEl=isToday?`<div><span class="today-circle">${cd}</span></div>`:`<span class="cal-day-num">${cd}</span>`;
 
-    const MAX=3;
+    const MAX=10;
     const shown=evs.slice(0,MAX);const hidden=evs.length-MAX;
     const evHtml=shown.map(({type,entry})=>{
       const cls=getEvCls(type,entry.status);
