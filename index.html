@@ -146,6 +146,22 @@
   .ev-cs{background:#fce7f3;color:#be185d;border-left:2px solid #be185d;}
   .leg-c-plan{background:#7c3aed;}
   .leg-c-done{background:#a78bfa;}
+
+  /* 안전보건협의체 자동등록 라디오 */
+  .council-auto-box{background:#f0f4ff;border:1.5px solid #c7d2fe;border-radius:8px;padding:10px 14px;margin-bottom:4px;}
+  .council-auto-box .ca-title{font-size:12px;font-weight:700;color:#4338ca;margin-bottom:8px;display:flex;align-items:center;gap:5px;}
+  .radio-group{display:flex;gap:12px;flex-wrap:wrap;}
+  .radio-label{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--bk);cursor:pointer;font-weight:600;}
+  .radio-label input[type=radio]{accent-color:#4338ca;width:14px;height:14px;cursor:pointer;}
+
+  /* 순회점검 월별 그룹 */
+  .month-group-header{background:var(--g1);padding:8px 14px;font-size:12px;font-weight:800;color:var(--navy);border-bottom:1.5px solid var(--g2);border-top:1.5px solid var(--g2);display:flex;align-items:center;gap:6px;}
+  .month-group-header:first-child{border-top:none;}
+  .month-pill{background:var(--navy);color:var(--wh);font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;}
+  .month-count{font-size:11px;color:var(--g4);font-weight:600;}
+
+  /* 시간 표시 */
+  .time-badge{display:inline-block;background:#f0f4ff;color:#4338ca;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:4px;}
 </style>
 </head>
 <body>
@@ -287,6 +303,7 @@
     <input type="hidden" id="modal-eid">
     <div class="form-grid">
       <div class="form-group"><label>점검일 *</label><input type="date" id="f-date"></div>
+      <div class="form-group"><label>시간</label><input type="time" id="f-time" placeholder="예) 10:00"></div>
       <div class="form-group"><label>상태 *</label>
         <select id="f-status"><option value="planned">예정</option><option value="done">완료</option><option value="pending">보류</option><option value="cancel">취소</option></select>
       </div>
@@ -295,6 +312,21 @@
       <div class="form-group jf"><label>수급인 참석자</label><input type="text" id="f-vendor" placeholder="수급인 사업소장 등"></div>
       <div class="form-group jf full"><label>점검 유형</label>
         <select id="f-jtype"><option>정기합동점검</option><option>수시합동점검</option><option>특별점검</option></select>
+      </div>
+      <!-- 합동점검 전용: 안전보건협의체 자동 등록 -->
+      <div class="form-group jf full" id="council-auto-wrap">
+        <div class="council-auto-box">
+          <div class="ca-title">🛡 안전보건협의체 일정 자동 등록</div>
+          <div class="radio-group">
+            <label class="radio-label"><input type="radio" name="council-auto" id="ca-none" value="none" checked> 등록 안함</label>
+            <label class="radio-label"><input type="radio" name="council-auto" id="ca-same" value="same"> 같은 날짜로 등록</label>
+            <label class="radio-label"><input type="radio" name="council-auto" id="ca-custom" value="custom"> 날짜 직접 지정</label>
+          </div>
+          <div id="ca-custom-date-wrap" style="display:none;margin-top:8px;display:none;">
+            <label style="font-size:12px;font-weight:700;color:var(--g4);">협의체 날짜 지정</label>
+            <input type="date" id="f-council-date" style="margin-top:4px;border:1.5px solid var(--g2);border-radius:7px;padding:6px 10px;font-size:13px;font-family:inherit;width:100%;background:var(--wh);outline:none;">
+          </div>
+        </div>
       </div>
       <div class="form-group pf"><label>주관부서 *</label><input type="text" id="f-dept" placeholder="예) FM팀, 시설운영팀 등"></div>
       <div class="form-group pf"><label>점검자</label><input type="text" id="f-pi" placeholder="담당자 이름"></div>
@@ -461,8 +493,10 @@ function renderJoint(f){
   const tb=document.getElementById('joint-body');
   const rows=data.joint.filter(r=>match(r,f)).sort((a,b)=>a.date.localeCompare(b.date));
   if(!rows.length){tb.innerHTML='<tr class="empty-row"><td colspan="8">등록된 합동점검 일정이 없습니다.</td></tr>';return;}
-  tb.innerHTML=rows.map(r=>{const[sl,sc]=stMap[r.status]||['',''];return`<tr>
-    <td><strong>${fmt(r.date)}</strong></td><td>${r.site}</td>
+  tb.innerHTML=rows.map(r=>{const[sl,sc]=stMap[r.status]||['',''];
+    const timeHtml=r.time?`<span class="time-badge">🕐 ${r.time}</span>`:'';
+    return`<tr>
+    <td><strong>${fmt(r.date)}</strong>${timeHtml}</td><td>${r.site}</td>
     <td><span class="smo-tag">${r.inspector||'—'}</span></td><td>${r.vendor||'—'}</td>
     <td>${r.jtype||'정기합동점검'}</td>
     <td><span class="status-badge ${sc}">${sl}</span></td>
@@ -477,16 +511,41 @@ function renderPatrol(f){
   const tb=document.getElementById('patrol-body');
   const rows=data.patrol.filter(r=>match(r,f)).sort((a,b)=>a.date.localeCompare(b.date));
   if(!rows.length){tb.innerHTML='<tr class="empty-row"><td colspan="8">등록된 순회점검 일정이 없습니다.<br>공사/용역 주관부서에서 일정을 추가해 주세요.</td></tr>';return;}
-  tb.innerHTML=rows.map(r=>{const[sl,sc]=stMap[r.status]||['',''];return`<tr>
-    <td><strong>${fmt(r.date)}</strong></td><td>${r.site}</td>
-    <td><span class="dept-tag">${r.dept||'—'}</span></td><td>${r.inspector||'—'}</td>
-    <td>${r.pcycle||'주 1회'}</td>
-    <td><span class="status-badge ${sc}">${sl}</span></td>
-    <td class="note-cell">${r.note||'—'}</td>
-    <td><div class="action-btns">
-      <button class="btn-edit" onclick="editEntry('patrol',${r.id})">수정</button>
-      <button class="btn-del" onclick="delEntry('patrol',${r.id})">삭제</button>
-    </div></td></tr>`;}).join('');
+
+  // 월별 그룹핑
+  const monthNames=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const groups={};
+  rows.forEach(r=>{
+    const d=new Date(r.date+'T00:00:00');
+    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label=`${d.getFullYear()}년 ${monthNames[d.getMonth()]}`;
+    if(!groups[key])groups[key]={label,rows:[]};
+    groups[key].rows.push(r);
+  });
+
+  let html='';
+  Object.keys(groups).sort().forEach(key=>{
+    const {label,rows:gr}=groups[key];
+    html+=`<tr><td colspan="8" class="month-group-header">
+      <span class="month-pill">${label}</span>
+      <span class="month-count">${gr.length}건</span>
+    </td></tr>`;
+    gr.forEach(r=>{
+      const[sl,sc]=stMap[r.status]||['',''];
+      const timeHtml=r.time?`<span class="time-badge">🕐 ${r.time}</span>`:'';
+      html+=`<tr>
+        <td><strong>${fmt(r.date)}</strong>${timeHtml}</td><td>${r.site}</td>
+        <td><span class="dept-tag">${r.dept||'—'}</span></td><td>${r.inspector||'—'}</td>
+        <td>${r.pcycle||'주 1회'}</td>
+        <td><span class="status-badge ${sc}">${sl}</span></td>
+        <td class="note-cell">${r.note||'—'}</td>
+        <td><div class="action-btns">
+          <button class="btn-edit" onclick="editEntry('patrol',${r.id})">수정</button>
+          <button class="btn-del" onclick="delEntry('patrol',${r.id})">삭제</button>
+        </div></td></tr>`;
+    });
+  });
+  tb.innerHTML=html;
 }
 
 function renderSummary(f){
@@ -501,7 +560,7 @@ function renderSummary(f){
 }
 
 function refreshSiteFilter(){
-  const sites=[...new Set([...data.joint,...data.patrol].map(r=>r.site))].sort();
+  const sites=[...new Set([...data.joint,...data.patrol,...data.council].map(r=>r.site))].sort();
   const sel=document.getElementById('filterSite');const cur=sel.value;
   sel.innerHTML='<option value="">전체</option>'+sites.map(s=>`<option value="${s}"${s===cur?' selected':''}>${s}</option>`).join('');
 }
@@ -552,7 +611,8 @@ function renderCalendar(){
     const evHtml=shown.map(({type,entry})=>{
       const cls=getEvCls(type,entry.status);
       const icon=type==='joint'?'🔶':type==='council'?'🟣':'🔵';
-      return`<div class="cal-ev ${cls}" onclick="showPopup('${type}',${entry.id})" title="${entry.site} (${stMap[entry.status]?.[0]||''})">${icon} ${entry.site}</div>`;
+      const timeStr=entry.time?` ${entry.time}`:'';
+      return`<div class="cal-ev ${cls}" onclick="showPopup('${type}',${entry.id})" title="${entry.site} (${stMap[entry.status]?.[0]||''})">${icon}${timeStr} ${entry.site}</div>`;
     }).join('');
     const moreHtml=hidden>0?`<div class="cal-more">+${hidden}건 더</div>`:'';
 
@@ -583,7 +643,7 @@ function showPopup(type,id){
   const pTitleMap={joint:'합동점검',patrol:'순회점검',council:'안전보건협의체'};
   document.getElementById('popup-title').textContent=`${pTitleMap[type]||type} — ${e.site}`;
   let rows=`
-    <div class="popup-row"><span class="popup-label">점검일</span>${fmt(e.date)}</div>
+    <div class="popup-row"><span class="popup-label">점검일</span>${fmt(e.date)}${e.time?` <strong>${e.time}</strong>`:''}</div>
     <div class="popup-row"><span class="popup-label">사업장</span>${e.site}</div>
     <div class="popup-row"><span class="popup-label">상태</span>${sl}</div>`;
   if(isJ){rows+=`
@@ -617,12 +677,16 @@ function openModal(type,entry=null){
   document.querySelectorAll('.jf').forEach(el=>el.style.display=isJ?'flex':'none');
   document.querySelectorAll('.pf').forEach(el=>el.style.display=(!isJ&&!isC)?'flex':'none');
   document.querySelectorAll('.cf').forEach(el=>el.style.display=isC?'flex':'none');
-  ['f-date','f-site','f-inspector','f-vendor','f-note','f-dept','f-pi','f-cvendor','f-cagenda'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f-date','f-time','f-site','f-inspector','f-vendor','f-note','f-dept','f-pi','f-cvendor','f-cagenda','f-council-date'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('f-status').value='planned';
   document.getElementById('f-jtype').value='정기합동점검';
   document.getElementById('f-pcycle').value='주 1회';
+  // 라디오 초기화
+  document.getElementById('ca-none').checked=true;
+  document.getElementById('ca-custom-date-wrap').style.display='none';
   if(entry){
     document.getElementById('f-date').value=entry.date;
+    if(entry.time)document.getElementById('f-time').value=entry.time;
     document.getElementById('f-site').value=entry.site;
     document.getElementById('f-status').value=entry.status;
     document.getElementById('f-note').value=entry.note||'';
@@ -634,23 +698,55 @@ function openModal(type,entry=null){
 }
 function closeModal(){document.getElementById('modal-bd').classList.remove('open');}
 
+// 라디오 변경 이벤트
+document.querySelectorAll('input[name="council-auto"]').forEach(radio=>{
+  radio.addEventListener('change',()=>{
+    const val=document.querySelector('input[name="council-auto"]:checked').value;
+    document.getElementById('ca-custom-date-wrap').style.display=val==='custom'?'block':'none';
+  });
+});
+
 function saveEntry(){
   const type=document.getElementById('modal-type').value;
   const eid=parseInt(document.getElementById('modal-eid').value)||0;
   const isJ=type==='joint';
   const date=document.getElementById('f-date').value;
   const site=document.getElementById('f-site').value.trim();
+  const time=document.getElementById('f-time').value||'';
   if(!date||!site){alert('점검일과 사업장명은 필수입니다.');return;}
-  const entry={id:eid||nextId++,date,site,status:document.getElementById('f-status').value,note:document.getElementById('f-note').value.trim()};
+  const entry={id:eid||nextId++,date,site,time,status:document.getElementById('f-status').value,note:document.getElementById('f-note').value.trim()};
   const isC=type==='council';
   if(isJ){entry.inspector=document.getElementById('f-inspector').value.trim();entry.vendor=document.getElementById('f-vendor').value.trim();entry.jtype=document.getElementById('f-jtype').value;}
   else if(isC){entry.ctype=document.getElementById('f-ctype').value;entry.cvendor=document.getElementById('f-cvendor').value.trim();entry.cagenda=document.getElementById('f-cagenda').value.trim();}
   else{entry.dept=document.getElementById('f-dept').value.trim();entry.inspector=document.getElementById('f-pi').value.trim();entry.pcycle=document.getElementById('f-pcycle').value;}
   const arr=data[type];const idx=arr.findIndex(r=>r.id===eid);
   if(idx>=0)arr[idx]=entry;else arr.push(entry);
+
+  // 합동점검 → 안전보건협의체 자동 등록
+  if(isJ&&!eid){
+    const caVal=document.querySelector('input[name="council-auto"]:checked').value;
+    if(caVal==='same'||caVal==='custom'){
+      const cDate=caVal==='custom'?document.getElementById('f-council-date').value:date;
+      if(!cDate&&caVal==='custom'){alert('협의체 날짜를 입력해주세요.');return;}
+      const cEntry={
+        id:nextId++,
+        date:cDate||date,
+        site,
+        time,
+        status:'planned',
+        ctype:'정기회의',
+        cvendor:'',
+        cagenda:`합동점검(${fmt(date)}) 연계 안전보건협의체`,
+        note:'합동점검 일정에서 자동 등록됨',
+        autoFromJoint:true
+      };
+      data.council.push(cEntry);
+    }
+  }
+
   const d=new Date(date);calYear=d.getFullYear();calMonth=d.getMonth();
   closeModal();
-  saveData().then(()=>{ render(); showToast('✅ 저장 완료!'); });
+  saveData().then(()=>{ render(); showToast(isJ&&document.querySelector&&document.querySelector('input[name="council-auto"]:checked')?.value!=='none'?'✅ 저장 완료! (협의체 일정도 등록됨)':'✅ 저장 완료!'); });
 }
 
 function editEntry(type,id){const e=data[type].find(r=>r.id===id);if(e)openModal(type,e);}
@@ -662,8 +758,10 @@ function renderCouncil(f){
   if(!rows.length){tb.innerHTML='<tr class="empty-row"><td colspan="8">등록된 안전보건협의체 일정이 없습니다.</td></tr>';return;}
   tb.innerHTML=rows.map(r=>{const[sl,sc]=stMap[r.status]||['',''];
     const typeTag=r.ctype&&r.ctype.includes('수시')?`<span style="background:#fce7f3;color:#be185d;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">${r.ctype}</span>`:`<span style="background:#ede9fe;color:#7c3aed;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;">${r.ctype||'정기회의'}</span>`;
+    const timeHtml=r.time?`<span class="time-badge">🕐 ${r.time}</span>`:'';
+    const autoTag=r.autoFromJoint?`<span style="background:#e0e7ff;color:#4338ca;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:4px;">자동등록</span>`:'';
     return`<tr>
-    <td><strong>${fmt(r.date)}</strong></td><td>${r.site}</td>
+    <td><strong>${fmt(r.date)}</strong>${timeHtml}${autoTag}</td><td>${r.site}</td>
     <td>${typeTag}</td>
     <td>${r.cvendor||'—'}</td>
     <td class="note-cell">${r.cagenda||'—'}</td>
