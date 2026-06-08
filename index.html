@@ -154,7 +154,13 @@
   .radio-label{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--bk);cursor:pointer;font-weight:600;}
   .radio-label input[type=radio]{accent-color:#4338ca;width:14px;height:14px;cursor:pointer;}
 
-  /* 순회점검 월별 그룹 */
+  /* 순회점검 월별 탭 */
+  .patrol-tab-bar{display:flex;gap:4px;padding:12px 16px;flex-wrap:wrap;border-bottom:1.5px solid var(--g2);background:var(--g1);}
+  .patrol-tab{border:1.5px solid var(--g2);background:var(--wh);color:var(--g4);border-radius:6px;padding:5px 12px;font-size:12px;font-family:inherit;font-weight:700;cursor:pointer;transition:all .15s;position:relative;white-space:nowrap;}
+  .patrol-tab:hover{border-color:var(--navy);color:var(--navy);}
+  .patrol-tab.active{background:var(--navy);color:var(--wh);border-color:var(--navy);}
+  .patrol-tab .tab-cnt{font-size:10px;font-weight:700;margin-left:4px;opacity:.75;}
+  .patrol-tab.active .tab-cnt{opacity:.85;}
   .month-group-header{background:var(--g1);padding:8px 14px;font-size:12px;font-weight:800;color:var(--navy);border-bottom:1.5px solid var(--g2);border-top:1.5px solid var(--g2);display:flex;align-items:center;gap:6px;}
   .month-group-header:first-child{border-top:none;}
   .month-pill{background:var(--navy);color:var(--wh);font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;}
@@ -240,6 +246,7 @@
     </div>
     <button class="btn-add" onclick="openModal('patrol')">+ 일정 추가</button>
   </div>
+  <div class="patrol-tab-bar" id="patrol-tab-bar"></div>
   <div class="table-wrap">
     <table>
       <thead><tr><th>점검일</th><th>사업장명</th><th>주관부서</th><th>점검자</th><th>점검 주기</th><th>상태</th><th>비고</th><th>관리</th></tr></thead>
@@ -365,6 +372,7 @@ let nextId=1;
 let calYear=new Date().getFullYear();
 let calMonth=new Date().getMonth();
 let popupType='',popupId=0;
+let patrolActiveTab='all';
 
 const stMap={planned:['예정','s-planned'],done:['완료','s-done'],pending:['보류','s-pending'],cancel:['취소','s-cancel']};
 
@@ -509,43 +517,66 @@ function renderJoint(f){
 
 function renderPatrol(f){
   const tb=document.getElementById('patrol-body');
-  const rows=data.patrol.filter(r=>match(r,f)).sort((a,b)=>a.date.localeCompare(b.date));
-  if(!rows.length){tb.innerHTML='<tr class="empty-row"><td colspan="8">등록된 순회점검 일정이 없습니다.<br>공사/용역 주관부서에서 일정을 추가해 주세요.</td></tr>';return;}
+  const tabBar=document.getElementById('patrol-tab-bar');
+  const allRows=data.patrol.filter(r=>match(r,f)).sort((a,b)=>a.date.localeCompare(b.date));
 
-  // 월별 그룹핑
+  if(!allRows.length){
+    tabBar.innerHTML='';
+    tb.innerHTML='<tr class="empty-row"><td colspan="8">등록된 순회점검 일정이 없습니다.<br>공사/용역 주관부서에서 일정을 추가해 주세요.</td></tr>';
+    return;
+  }
+
+  // 월별 그룹 구성
   const monthNames=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   const groups={};
-  rows.forEach(r=>{
+  allRows.forEach(r=>{
     const d=new Date(r.date+'T00:00:00');
     const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    const label=`${d.getFullYear()}년 ${monthNames[d.getMonth()]}`;
-    if(!groups[key])groups[key]={label,rows:[]};
+    const label=`${monthNames[d.getMonth()]}`;
+    if(!groups[key])groups[key]={label,key,rows:[]};
     groups[key].rows.push(r);
   });
+  const sortedKeys=Object.keys(groups).sort();
+
+  // 현재 탭이 유효한지 확인, 없으면 첫번째 월로
+  if(patrolActiveTab!=='all'&&!groups[patrolActiveTab]){
+    patrolActiveTab=sortedKeys[0];
+  }
+
+  // 탭 바 렌더
+  const allCnt=allRows.length;
+  let tabHtml=`<button class="patrol-tab${patrolActiveTab==='all'?' active':''}" onclick="setPatrolTab('all')">전체 <span class="tab-cnt">${allCnt}</span></button>`;
+  sortedKeys.forEach(key=>{
+    const {label,rows}=groups[key];
+    tabHtml+=`<button class="patrol-tab${patrolActiveTab===key?' active':''}" onclick="setPatrolTab('${key}')">${label} <span class="tab-cnt">${rows.length}</span></button>`;
+  });
+  tabBar.innerHTML=tabHtml;
+
+  // 표시할 행 결정
+  const displayRows=patrolActiveTab==='all'?allRows:(groups[patrolActiveTab]?.rows||[]);
 
   let html='';
-  Object.keys(groups).sort().forEach(key=>{
-    const {label,rows:gr}=groups[key];
-    html+=`<tr><td colspan="8" class="month-group-header">
-      <span class="month-pill">${label}</span>
-      <span class="month-count">${gr.length}건</span>
-    </td></tr>`;
-    gr.forEach(r=>{
-      const[sl,sc]=stMap[r.status]||['',''];
-      const timeHtml=r.time?`<span class="time-badge">🕐 ${r.time}</span>`:'';
-      html+=`<tr>
-        <td><strong>${fmt(r.date)}</strong>${timeHtml}</td><td>${r.site}</td>
-        <td><span class="dept-tag">${r.dept||'—'}</span></td><td>${r.inspector||'—'}</td>
-        <td>${r.pcycle||'주 1회'}</td>
-        <td><span class="status-badge ${sc}">${sl}</span></td>
-        <td class="note-cell">${r.note||'—'}</td>
-        <td><div class="action-btns">
-          <button class="btn-edit" onclick="editEntry('patrol',${r.id})">수정</button>
-          <button class="btn-del" onclick="delEntry('patrol',${r.id})">삭제</button>
-        </div></td></tr>`;
-    });
+  displayRows.forEach(r=>{
+    const[sl,sc]=stMap[r.status]||['',''];
+    const timeHtml=r.time?`<span class="time-badge">🕐 ${r.time}</span>`:'';
+    html+=`<tr>
+      <td><strong>${fmt(r.date)}</strong>${timeHtml}</td><td>${r.site}</td>
+      <td><span class="dept-tag">${r.dept||'—'}</span></td><td>${r.inspector||'—'}</td>
+      <td>${r.pcycle||'주 1회'}</td>
+      <td><span class="status-badge ${sc}">${sl}</span></td>
+      <td class="note-cell">${r.note||'—'}</td>
+      <td><div class="action-btns">
+        <button class="btn-edit" onclick="editEntry('patrol',${r.id})">수정</button>
+        <button class="btn-del" onclick="delEntry('patrol',${r.id})">삭제</button>
+      </div></td></tr>`;
   });
   tb.innerHTML=html;
+}
+
+function setPatrolTab(key){
+  patrolActiveTab=key;
+  const f=getF();
+  renderPatrol(f);
 }
 
 function renderSummary(f){
