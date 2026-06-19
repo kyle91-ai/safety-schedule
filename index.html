@@ -325,11 +325,11 @@
         <div class="council-auto-box">
           <div class="ca-title">🛡 안전보건협의체 일정 자동 등록</div>
           <div class="radio-group">
-            <label class="radio-label"><input type="radio" name="council-auto" id="ca-none" value="none" checked> 등록 안함</label>
-            <label class="radio-label"><input type="radio" name="council-auto" id="ca-same" value="same"> 같은 날짜로 등록</label>
-            <label class="radio-label"><input type="radio" name="council-auto" id="ca-custom" value="custom"> 날짜 직접 지정</label>
+            <label class="radio-label"><input type="radio" name="council-auto" id="ca-none" value="none" checked onclick="onCouncilRadioChange()"> 등록 안함</label>
+            <label class="radio-label"><input type="radio" name="council-auto" id="ca-same" value="same" onclick="onCouncilRadioChange()"> 같은 날짜로 등록</label>
+            <label class="radio-label"><input type="radio" name="council-auto" id="ca-custom" value="custom" onclick="onCouncilRadioChange()"> 날짜 직접 지정</label>
           </div>
-          <div id="ca-custom-date-wrap" style="display:none;margin-top:8px;display:none;">
+          <div id="ca-custom-date-wrap" style="display:none;margin-top:8px;">
             <label style="font-size:12px;font-weight:700;color:var(--g4);">협의체 날짜 지정</label>
             <input type="date" id="f-council-date" style="margin-top:4px;border:1.5px solid var(--g2);border-radius:7px;padding:6px 10px;font-size:13px;font-family:inherit;width:100%;background:var(--wh);outline:none;">
           </div>
@@ -729,13 +729,11 @@ function openModal(type,entry=null){
 }
 function closeModal(){document.getElementById('modal-bd').classList.remove('open');}
 
-// 라디오 변경 이벤트
-document.querySelectorAll('input[name="council-auto"]').forEach(radio=>{
-  radio.addEventListener('change',()=>{
-    const val=document.querySelector('input[name="council-auto"]:checked').value;
-    document.getElementById('ca-custom-date-wrap').style.display=val==='custom'?'block':'none';
-  });
-});
+// 라디오 변경 이벤트 — 모달 열릴 때마다 확실히 동작하도록 직접 onclick 사용
+function onCouncilRadioChange(){
+  const val=document.querySelector('input[name="council-auto"]:checked').value;
+  document.getElementById('ca-custom-date-wrap').style.display=val==='custom'?'block':'none';
+}
 
 function saveEntry(){
   const type=document.getElementById('modal-type').value;
