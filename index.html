@@ -154,7 +154,24 @@
   .radio-label{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--bk);cursor:pointer;font-weight:600;}
   .radio-label input[type=radio]{accent-color:#4338ca;width:14px;height:14px;cursor:pointer;}
 
-  /* 순회점검 월별 탭 */
+  /* 순회점검 페이지네이션 */
+  .patrol-pagination{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-top:1.5px solid var(--g2);background:var(--g1);flex-wrap:wrap;gap:8px;}
+  .page-size-wrap{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--g4);font-weight:600;}
+  .page-size-btn{border:1.5px solid var(--g2);background:var(--wh);color:var(--g4);border-radius:5px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .page-size-btn.active{background:var(--navy);color:var(--wh);border-color:var(--navy);}
+  .page-nav-wrap{display:flex;align-items:center;gap:4px;}
+  .page-nav-btn{border:1.5px solid var(--g2);background:var(--wh);color:var(--navy);border-radius:5px;padding:3px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .page-nav-btn:disabled{opacity:.35;cursor:not-allowed;}
+  .page-nav-btn.active{background:var(--navy);color:var(--wh);border-color:var(--navy);}
+  .page-info{font-size:12px;color:var(--g4);font-weight:600;}
+
+  /* 지도점검 */
+  .section-header.guidance{background:linear-gradient(135deg,#065f46,#047857);}
+  .guidance .sec-badge{background:rgba(255,255,255,.18);color:var(--wh);}
+  .ev-gp{background:#d1fae5;color:#065f46;border-left:2px solid #059669;}
+  .ev-gd{background:#a7f3d0;color:#064e3b;border-left:2px solid #047857;}
+  .leg-g-plan{background:#059669;}
+  .leg-g-done{background:#6ee7b7;}
   .patrol-tab-bar{display:flex;gap:4px;padding:12px 16px;flex-wrap:wrap;border-bottom:1.5px solid var(--g2);background:var(--g1);}
   .patrol-tab{border:1.5px solid var(--g2);background:var(--wh);color:var(--g4);border-radius:6px;padding:5px 12px;font-size:12px;font-family:inherit;font-weight:700;cursor:pointer;transition:all .15s;position:relative;white-space:nowrap;}
   .patrol-tab:hover{border-color:var(--navy);color:var(--navy);}
@@ -253,6 +270,7 @@
       <tbody id="patrol-body"></tbody>
     </table>
   </div>
+  <div class="patrol-pagination" id="patrol-pagination"></div>
 </div>
 
 
@@ -270,6 +288,24 @@
     <table>
       <thead><tr><th>회의일</th><th>사업장명</th><th>회의 유형</th><th>참석 수급업체</th><th>주요 안건</th><th>상태</th><th>비고</th><th>관리</th></tr></thead>
       <tbody id="council-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 안전보건 지도점검 -->
+<div class="section-card">
+  <div class="section-header guidance">
+    <div class="section-title">
+      <span class="sec-badge">지도점검</span>
+      <div><h2>안전보건 지도점검 일정 — 반기 1회</h2>
+      <div class="section-sub">주기: 반기 1회 이상 / 고용노동부·안전보건공단 등 외부기관 지도점검 및 자체 지도점검</div></div>
+    </div>
+    <button class="btn-add" onclick="openModal('guidance')">+ 일정 추가</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>점검일</th><th>사업장명</th><th>점검기관</th><th>점검자</th><th>점검 유형</th><th>상태</th><th>비고</th><th>관리</th></tr></thead>
+      <tbody id="guidance-body"></tbody>
     </table>
   </div>
 </div>
@@ -345,6 +381,12 @@
       </div>
       <div class="form-group cf full"><label>참석 수급업체</label><input type="text" id="f-cvendor" placeholder="예) FM사, 경비용역 등 (복수 입력 가능)"></div>
       <div class="form-group cf full"><label>주요 안건</label><input type="text" id="f-cagenda" placeholder="예) 위험성평가 결과 공유, 재해예방 대책 등"></div>
+      <!-- 지도점검 전용 필드 -->
+      <div class="form-group gf full"><label>점검기관</label><input type="text" id="f-gorg" placeholder="예) 고용노동부, 안전보건공단, 자체 등"></div>
+      <div class="form-group gf"><label>점검자</label><input type="text" id="f-ginspector" placeholder="점검 담당자"></div>
+      <div class="form-group gf"><label>점검 유형</label>
+        <select id="f-gtype"><option>정기지도점검</option><option>수시지도점검</option><option>특별지도점검</option><option>자체지도점검</option></select>
+      </div>
       <div class="form-group full"><label>비고</label><textarea id="f-note" rows="2" placeholder="특이사항, 회의록 번호 등"></textarea></div>
     </div>
     <div class="modal-actions">
@@ -367,12 +409,14 @@
 </div>
 
 <script>
-let data={joint:[],patrol:[],council:[]};
+let data={joint:[],patrol:[],council:[],guidance:[]};
 let nextId=1;
 let calYear=new Date().getFullYear();
 let calMonth=new Date().getMonth();
 let popupType='',popupId=0;
 let patrolActiveTab='all';
+let patrolPage=1;
+let patrolPageSize=10;
 
 const stMap={planned:['예정','s-planned'],done:['완료','s-done'],pending:['보류','s-pending'],cancel:['취소','s-cancel']};
 
@@ -441,7 +485,8 @@ async function loadData() {
 
     window[callbackName] = function(parsed) {
       try {
-        data   = parsed.data   || { joint:[], patrol:[], council:[] };
+        data   = parsed.data   || { joint:[], patrol:[], council:[], guidance:[] };
+        if(!data.guidance) data.guidance=[];
         nextId = parsed.nextId || 1;
         setSyncStatus('ok');
       } catch(e) {
@@ -477,7 +522,7 @@ async function loadData() {
 
 async function resetData() {
   if (!confirm('모든 일정 데이터를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
-  data = { joint:[], patrol:[], council:[] };
+  data = { joint:[], patrol:[], council:[], guidance:[] };
   nextId = 1;
   await saveData();
   render();
@@ -518,45 +563,45 @@ function renderJoint(f){
 function renderPatrol(f){
   const tb=document.getElementById('patrol-body');
   const tabBar=document.getElementById('patrol-tab-bar');
+  const pagination=document.getElementById('patrol-pagination');
   const allRows=data.patrol.filter(r=>match(r,f)).sort((a,b)=>a.date.localeCompare(b.date));
 
   if(!allRows.length){
     tabBar.innerHTML='';
+    pagination.innerHTML='';
     tb.innerHTML='<tr class="empty-row"><td colspan="8">등록된 순회점검 일정이 없습니다.<br>공사/용역 주관부서에서 일정을 추가해 주세요.</td></tr>';
     return;
   }
 
-  // 월별 그룹 구성
+  // 월별 탭
   const monthNames=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   const groups={};
   allRows.forEach(r=>{
     const d=new Date(r.date+'T00:00:00');
     const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    const label=`${monthNames[d.getMonth()]}`;
-    if(!groups[key])groups[key]={label,key,rows:[]};
+    if(!groups[key])groups[key]={label:monthNames[d.getMonth()],key,rows:[]};
     groups[key].rows.push(r);
   });
   const sortedKeys=Object.keys(groups).sort();
+  if(patrolActiveTab!=='all'&&!groups[patrolActiveTab]) patrolActiveTab=sortedKeys[0];
 
-  // 현재 탭이 유효한지 확인, 없으면 첫번째 월로
-  if(patrolActiveTab!=='all'&&!groups[patrolActiveTab]){
-    patrolActiveTab=sortedKeys[0];
-  }
-
-  // 탭 바 렌더
-  const allCnt=allRows.length;
-  let tabHtml=`<button class="patrol-tab${patrolActiveTab==='all'?' active':''}" onclick="setPatrolTab('all')">전체 <span class="tab-cnt">${allCnt}</span></button>`;
+  let tabHtml=`<button class="patrol-tab${patrolActiveTab==='all'?' active':''}" onclick="setPatrolTab('all')">전체 <span class="tab-cnt">${allRows.length}</span></button>`;
   sortedKeys.forEach(key=>{
-    const {label,rows}=groups[key];
+    const{label,rows}=groups[key];
     tabHtml+=`<button class="patrol-tab${patrolActiveTab===key?' active':''}" onclick="setPatrolTab('${key}')">${label} <span class="tab-cnt">${rows.length}</span></button>`;
   });
   tabBar.innerHTML=tabHtml;
 
-  // 표시할 행 결정
-  const displayRows=patrolActiveTab==='all'?allRows:(groups[patrolActiveTab]?.rows||[]);
+  const tabRows=patrolActiveTab==='all'?allRows:(groups[patrolActiveTab]?.rows||[]);
+  const total=tabRows.length;
+  const totalPages=Math.max(1,Math.ceil(total/patrolPageSize));
+  if(patrolPage>totalPages) patrolPage=totalPages;
+  const start=(patrolPage-1)*patrolPageSize;
+  const pageRows=tabRows.slice(start,start+patrolPageSize);
 
+  // 테이블 렌더
   let html='';
-  displayRows.forEach(r=>{
+  pageRows.forEach(r=>{
     const[sl,sc]=stMap[r.status]||['',''];
     const timeHtml=r.time?`<span class="time-badge">🕐 ${r.time}</span>`:'';
     html+=`<tr>
@@ -571,17 +616,51 @@ function renderPatrol(f){
       </div></td></tr>`;
   });
   tb.innerHTML=html;
+
+  // 페이지네이션 바
+  const sizes=[10,20,30,50];
+  let pgHtml=`<div class="page-size-wrap">페이지당 표시:
+    ${sizes.map(s=>`<button class="page-size-btn${patrolPageSize===s?' active':''}" onclick="setPatrolPageSize(${s})">${s}개</button>`).join('')}
+  </div>`;
+  pgHtml+=`<span class="page-info">${start+1}–${Math.min(start+patrolPageSize,total)} / 총 ${total}건</span>`;
+  pgHtml+=`<div class="page-nav-wrap">
+    <button class="page-nav-btn" onclick="setPatrolPage(1)" ${patrolPage===1?'disabled':''}>«</button>
+    <button class="page-nav-btn" onclick="setPatrolPage(${patrolPage-1})" ${patrolPage===1?'disabled':''}>‹</button>`;
+  const pStart=Math.max(1,patrolPage-2);const pEnd=Math.min(totalPages,patrolPage+2);
+  for(let p=pStart;p<=pEnd;p++) pgHtml+=`<button class="page-nav-btn${p===patrolPage?' active':''}" onclick="setPatrolPage(${p})">${p}</button>`;
+  pgHtml+=`<button class="page-nav-btn" onclick="setPatrolPage(${patrolPage+1})" ${patrolPage===totalPages?'disabled':''}>›</button>
+    <button class="page-nav-btn" onclick="setPatrolPage(${totalPages})" ${patrolPage===totalPages?'disabled':''}>»</button>
+  </div>`;
+  pagination.innerHTML=pgHtml;
 }
 
-function setPatrolTab(key){
-  patrolActiveTab=key;
-  const f=getF();
-  renderPatrol(f);
+function setPatrolTab(key){patrolActiveTab=key;patrolPage=1;renderPatrol(getF());}
+function setPatrolPage(p){patrolPage=p;renderPatrol(getF());}
+function setPatrolPageSize(s){patrolPageSize=s;patrolPage=1;renderPatrol(getF());}
+
+function renderGuidance(f){
+  const tb=document.getElementById('guidance-body');
+  const rows=data.guidance.filter(r=>match(r,f)).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!rows.length){tb.innerHTML='<tr class="empty-row"><td colspan="8">등록된 지도점검 일정이 없습니다.</td></tr>';return;}
+  tb.innerHTML=rows.map(r=>{
+    const[sl,sc]=stMap[r.status]||['',''];
+    const timeHtml=r.time?`<span class="time-badge">🕐 ${r.time}</span>`:'';
+    return`<tr>
+      <td><strong>${fmt(r.date)}</strong>${timeHtml}</td><td>${r.site}</td>
+      <td>${r.gorg||'—'}</td><td>${r.ginspector||'—'}</td>
+      <td>${r.gtype||'정기지도점검'}</td>
+      <td><span class="status-badge ${sc}">${sl}</span></td>
+      <td class="note-cell">${r.note||'—'}</td>
+      <td><div class="action-btns">
+        <button class="btn-edit" onclick="editEntry('guidance',${r.id})">수정</button>
+        <button class="btn-del" onclick="delEntry('guidance',${r.id})">삭제</button>
+      </div></td></tr>`;
+  }).join('');
 }
 
 function renderSummary(f){
   const jf=data.joint.filter(r=>match(r,f));const pf=data.patrol.filter(r=>match(r,f));
-  const cf=data.council.filter(r=>match(r,f));
+  const cf=data.council.filter(r=>match(r,f));const gf=data.guidance.filter(r=>match(r,f));
   document.getElementById('sj-plan').textContent=jf.length;
   document.getElementById('sj-done').textContent=jf.filter(r=>r.status==='done').length;
   document.getElementById('sp-plan').textContent=pf.length;
@@ -591,7 +670,7 @@ function renderSummary(f){
 }
 
 function refreshSiteFilter(){
-  const sites=[...new Set([...data.joint,...data.patrol,...data.council].map(r=>r.site))].sort();
+  const sites=[...new Set([...data.joint,...data.patrol,...data.council,...data.guidance].map(r=>r.site))].sort();
   const sel=document.getElementById('filterSite');const cur=sel.value;
   sel.innerHTML='<option value="">전체</option>'+sites.map(s=>`<option value="${s}"${s===cur?' selected':''}>${s}</option>`).join('');
 }
@@ -614,6 +693,7 @@ function renderCalendar(){
   addEv('joint',data.joint);
   addEv('patrol',data.patrol);
   addEv('council',data.council);
+  addEv('guidance',data.guidance);
 
   const dows=['일','월','화','수','목','금','토'];
   let html=dows.map((d,i)=>`<div class="cal-dow" style="${i===0?'color:#ef4444':i===6?'color:var(--blue)':''}">${d}</div>`).join('');
@@ -641,7 +721,7 @@ function renderCalendar(){
     const shown=evs.slice(0,MAX);const hidden=evs.length-MAX;
     const evHtml=shown.map(({type,entry})=>{
       const cls=getEvCls(type,entry.status);
-      const icon=type==='joint'?'🔶':type==='council'?'🟣':'🔵';
+      const icon=type==='joint'?'🔶':type==='council'?'🟣':type==='guidance'?'🟢':'🔵';
       const timeStr=entry.time?` ${entry.time}`:'';
       return`<div class="cal-ev ${cls}" onclick="showPopup('${type}',${entry.id})" title="${entry.site} (${stMap[entry.status]?.[0]||''})">${icon}${timeStr} ${entry.site}</div>`;
     }).join('');
@@ -659,6 +739,7 @@ function getEvCls(type,status){
   if(status==='pending')return'cal-ev ev-pending';
   if(type==='council')return status==='done'?'cal-ev ev-cd':'cal-ev ev-cp';
   if(type==='joint')return status==='done'?'cal-ev ev-jd':'cal-ev ev-jp';
+  if(type==='guidance')return status==='done'?'cal-ev ev-gd':'cal-ev ev-gp';
   return status==='done'?'cal-ev ev-pd':'cal-ev ev-pp';
 }
 
@@ -671,7 +752,7 @@ function showPopup(type,id){
   const e=data[type].find(r=>r.id===id);if(!e)return;
   const isJ=type==='joint';
   const[sl]=stMap[e.status]||['—'];
-  const pTitleMap={joint:'합동점검',patrol:'순회점검',council:'안전보건협의체'};
+  const pTitleMap={joint:'합동점검',patrol:'순회점검',council:'안전보건협의체',guidance:'안전보건 지도점검'};
   document.getElementById('popup-title').textContent=`${pTitleMap[type]||type} — ${e.site}`;
   let rows=`
     <div class="popup-row"><span class="popup-label">점검일</span>${fmt(e.date)}${e.time?` <strong>${e.time}</strong>`:''}</div>
@@ -686,6 +767,10 @@ function showPopup(type,id){
     <div class="popup-row"><span class="popup-label">회의유형</span>${e.ctype||'정기회의'}</div>
     <div class="popup-row"><span class="popup-label">참석업체</span>${e.cvendor||'—'}</div>
     <div class="popup-row"><span class="popup-label">주요안건</span>${e.cagenda||'—'}</div>`;}
+  else if(type==='guidance'){rows+=`
+    <div class="popup-row"><span class="popup-label">점검기관</span>${e.gorg||'—'}</div>
+    <div class="popup-row"><span class="popup-label">점검자</span>${e.ginspector||'—'}</div>
+    <div class="popup-row"><span class="popup-label">유형</span>${e.gtype||'—'}</div>`;}
   else{rows+=`
     <div class="popup-row"><span class="popup-label">주관부서</span>${e.dept||'—'}</div>
     <div class="popup-row"><span class="popup-label">점검자</span>${e.inspector||'—'}</div>
@@ -701,18 +786,19 @@ function closePopup(){document.getElementById('popup-bd').classList.remove('open
 function openModal(type,entry=null){
   const isJ=type==='joint';
   const isC=type==='council';
+  const isG=type==='guidance';
   document.getElementById('modal-type').value=type;
   document.getElementById('modal-eid').value=entry?entry.id:'';
-  const titleMap={joint:'합동점검',patrol:'순회점검',council:'안전보건협의체'};
+  const titleMap={joint:'합동점검',patrol:'순회점검',council:'안전보건협의체',guidance:'안전보건 지도점검'};
   document.getElementById('modal-title').textContent=(entry?'일정 수정':'일정 추가')+' — '+titleMap[type];
   document.querySelectorAll('.jf').forEach(el=>el.style.display=isJ?'flex':'none');
-  document.querySelectorAll('.pf').forEach(el=>el.style.display=(!isJ&&!isC)?'flex':'none');
+  document.querySelectorAll('.pf').forEach(el=>el.style.display=(!isJ&&!isC&&!isG)?'flex':'none');
   document.querySelectorAll('.cf').forEach(el=>el.style.display=isC?'flex':'none');
-  ['f-date','f-time','f-site','f-inspector','f-vendor','f-note','f-dept','f-pi','f-cvendor','f-cagenda','f-council-date'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.querySelectorAll('.gf').forEach(el=>el.style.display=isG?'flex':'none');
+  ['f-date','f-time','f-site','f-inspector','f-vendor','f-note','f-dept','f-pi','f-cvendor','f-cagenda','f-council-date','f-gorg','f-ginspector'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('f-status').value='planned';
   document.getElementById('f-jtype').value='정기합동점검';
   document.getElementById('f-pcycle').value='주 1회';
-  // 라디오 초기화
   document.getElementById('ca-none').checked=true;
   document.getElementById('ca-custom-date-wrap').style.display='none';
   if(entry){
@@ -722,7 +808,8 @@ function openModal(type,entry=null){
     document.getElementById('f-status').value=entry.status;
     document.getElementById('f-note').value=entry.note||'';
     if(isJ){document.getElementById('f-inspector').value=entry.inspector||'';document.getElementById('f-vendor').value=entry.vendor||'';document.getElementById('f-jtype').value=entry.jtype||'정기합동점검';}
-    else if(type==='council'){document.getElementById('f-ctype').value=entry.ctype||'정기회의';document.getElementById('f-cvendor').value=entry.cvendor||'';document.getElementById('f-cagenda').value=entry.cagenda||'';}
+    else if(isC){document.getElementById('f-ctype').value=entry.ctype||'정기회의';document.getElementById('f-cvendor').value=entry.cvendor||'';document.getElementById('f-cagenda').value=entry.cagenda||'';}
+    else if(isG){document.getElementById('f-gorg').value=entry.gorg||'';document.getElementById('f-ginspector').value=entry.ginspector||'';document.getElementById('f-gtype').value=entry.gtype||'정기지도점검';}
     else{document.getElementById('f-dept').value=entry.dept||'';document.getElementById('f-pi').value=entry.inspector||'';document.getElementById('f-pcycle').value=entry.pcycle||'주 1회';}
   }
   document.getElementById('modal-bd').classList.add('open');
@@ -739,47 +826,39 @@ function saveEntry(){
   const type=document.getElementById('modal-type').value;
   const eid=parseInt(document.getElementById('modal-eid').value)||0;
   const isJ=type==='joint';
+  const isC=type==='council';
+  const isG=type==='guidance';
   const date=document.getElementById('f-date').value;
   const site=document.getElementById('f-site').value.trim();
   const time=document.getElementById('f-time').value||'';
   if(!date||!site){alert('점검일과 사업장명은 필수입니다.');return;}
   const entry={id:eid||nextId++,date,site,time,status:document.getElementById('f-status').value,note:document.getElementById('f-note').value.trim()};
-  const isC=type==='council';
   if(isJ){entry.inspector=document.getElementById('f-inspector').value.trim();entry.vendor=document.getElementById('f-vendor').value.trim();entry.jtype=document.getElementById('f-jtype').value;}
   else if(isC){entry.ctype=document.getElementById('f-ctype').value;entry.cvendor=document.getElementById('f-cvendor').value.trim();entry.cagenda=document.getElementById('f-cagenda').value.trim();}
+  else if(isG){entry.gorg=document.getElementById('f-gorg').value.trim();entry.ginspector=document.getElementById('f-ginspector').value.trim();entry.gtype=document.getElementById('f-gtype').value;}
   else{entry.dept=document.getElementById('f-dept').value.trim();entry.inspector=document.getElementById('f-pi').value.trim();entry.pcycle=document.getElementById('f-pcycle').value;}
   const arr=data[type];const idx=arr.findIndex(r=>r.id===eid);
   if(idx>=0)arr[idx]=entry;else arr.push(entry);
 
   // 합동점검 → 안전보건협의체 자동 등록
+  let councilAutoRegistered=false;
   if(isJ){
     const caVal=document.querySelector('input[name="council-auto"]:checked').value;
     if(caVal==='same'||caVal==='custom'){
       const cDate=caVal==='custom'?document.getElementById('f-council-date').value:date;
       if(!cDate&&caVal==='custom'){alert('협의체 날짜를 입력해주세요.');return;}
-      const cEntry={
-        id:nextId++,
-        date:cDate||date,
-        site,
-        time,
-        status:'planned',
-        ctype:'정기회의',
-        cvendor:'',
-        cagenda:`합동점검(${fmt(date)}) 연계 안전보건협의체`,
-        note:'합동점검 일정에서 자동 등록됨',
-        autoFromJoint:true
-      };
-      data.council.push(cEntry);
+      data.council.push({id:nextId++,date:cDate||date,site,time,status:'planned',ctype:'정기회의',cvendor:'',cagenda:`합동점검(${fmt(date)}) 연계 안전보건협의체`,note:'합동점검 일정에서 자동 등록됨',autoFromJoint:true});
+      councilAutoRegistered=true;
     }
   }
 
   const d=new Date(date);calYear=d.getFullYear();calMonth=d.getMonth();
   closeModal();
-  saveData().then(()=>{ render(); showToast(isJ&&document.querySelector&&document.querySelector('input[name="council-auto"]:checked')?.value!=='none'?'✅ 저장 완료! (협의체 일정도 등록됨)':'✅ 저장 완료!'); });
+  saveData().then(()=>{render();showToast(councilAutoRegistered?'✅ 저장 완료! (협의체 일정도 등록됨)':'✅ 저장 완료!');});
 }
 
 function editEntry(type,id){const e=data[type].find(r=>r.id===id);if(e)openModal(type,e);}
-function delEntry(type,id){if(!confirm('이 일정을 삭제하시겠습니까?'))return;data[type]=data[type].filter(r=>r.id!==id);saveData().then(()=>{ render(); showToast('🗑 삭제 완료'); });}
+function delEntry(type,id){if(!confirm('이 일정을 삭제하시겠습니까?'))return;data[type]=data[type].filter(r=>r.id!==id);saveData().then(()=>{render();showToast('🗑 삭제 완료');});}
 
 function renderCouncil(f){
   const tb=document.getElementById('council-body');
@@ -801,7 +880,7 @@ function renderCouncil(f){
       <button class="btn-del" onclick="delEntry('council',${r.id})">삭제</button>
     </div></td></tr>`;}).join('');
 }
-function render(){const f=getF();renderJoint(f);renderPatrol(f);renderCouncil(f);renderSummary(f);refreshSiteFilter();renderCalendar();}
+function render(){const f=getF();renderJoint(f);renderPatrol(f);renderCouncil(f);renderGuidance(f);renderSummary(f);refreshSiteFilter();renderCalendar();}
 
 document.getElementById('modal-bd').addEventListener('click',e=>{if(e.target===document.getElementById('modal-bd'))closeModal();});
 document.getElementById('popup-bd').addEventListener('click',e=>{if(e.target===document.getElementById('popup-bd'))closePopup();});
