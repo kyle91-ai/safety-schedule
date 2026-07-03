@@ -233,6 +233,8 @@
   <div class="summary-card green"><div class="sum-label">순회점검 완료</div><div class="sum-val" id="sp-done">0</div><div class="sum-sub">건</div></div>
   <div class="summary-card" style="border-left-color:#7c3aed;"><div class="sum-label">안전보건협의체 계획</div><div class="sum-val" id="sc-plan" style="color:#7c3aed;">0</div><div class="sum-sub">건 (SMO 주관)</div></div>
   <div class="summary-card green"><div class="sum-label">안전보건협의체 완료</div><div class="sum-val" id="sc-done">0</div><div class="sum-sub">건</div></div>
+  <div class="summary-card" style="border-left-color:#059669;"><div class="sum-label">지도점검 계획</div><div class="sum-val" id="sg-plan" style="color:#059669;">0</div><div class="sum-sub">건 (반기 1회)</div></div>
+  <div class="summary-card green"><div class="sum-label">지도점검 완료</div><div class="sum-val" id="sg-done">0</div><div class="sum-sub">건</div></div>
 </div>
 
 <!-- 합동점검 -->
@@ -585,11 +587,16 @@ function renderPatrol(f){
   const sortedKeys=Object.keys(groups).sort();
   if(patrolActiveTab!=='all'&&!groups[patrolActiveTab]) patrolActiveTab=sortedKeys[0];
 
+  const sizes=[10,20,30,50];
   let tabHtml=`<button class="patrol-tab${patrolActiveTab==='all'?' active':''}" onclick="setPatrolTab('all')">전체 <span class="tab-cnt">${allRows.length}</span></button>`;
   sortedKeys.forEach(key=>{
     const{label,rows}=groups[key];
     tabHtml+=`<button class="patrol-tab${patrolActiveTab===key?' active':''}" onclick="setPatrolTab('${key}')">${label} <span class="tab-cnt">${rows.length}</span></button>`;
   });
+  tabHtml+=`<div style="margin-left:auto;display:flex;align-items:center;gap:4px;">
+    <span style="font-size:11px;color:var(--g4);font-weight:600;">페이지당:</span>
+    ${sizes.map(s=>`<button class="page-size-btn${patrolPageSize===s?' active':''}" onclick="setPatrolPageSize(${s})">${s}개</button>`).join('')}
+  </div>`;
   tabBar.innerHTML=tabHtml;
 
   const tabRows=patrolActiveTab==='all'?allRows:(groups[patrolActiveTab]?.rows||[]);
@@ -618,11 +625,7 @@ function renderPatrol(f){
   tb.innerHTML=html;
 
   // 페이지네이션 바
-  const sizes=[10,20,30,50];
-  let pgHtml=`<div class="page-size-wrap">페이지당 표시:
-    ${sizes.map(s=>`<button class="page-size-btn${patrolPageSize===s?' active':''}" onclick="setPatrolPageSize(${s})">${s}개</button>`).join('')}
-  </div>`;
-  pgHtml+=`<span class="page-info">${start+1}–${Math.min(start+patrolPageSize,total)} / 총 ${total}건</span>`;
+  let pgHtml=`<span class="page-info">${start+1}–${Math.min(start+patrolPageSize,total)} / 총 ${total}건</span>`;
   pgHtml+=`<div class="page-nav-wrap">
     <button class="page-nav-btn" onclick="setPatrolPage(1)" ${patrolPage===1?'disabled':''}>«</button>
     <button class="page-nav-btn" onclick="setPatrolPage(${patrolPage-1})" ${patrolPage===1?'disabled':''}>‹</button>`;
@@ -667,6 +670,8 @@ function renderSummary(f){
   document.getElementById('sp-done').textContent=pf.filter(r=>r.status==='done').length;
   document.getElementById('sc-plan').textContent=cf.length;
   document.getElementById('sc-done').textContent=cf.filter(r=>r.status==='done').length;
+  document.getElementById('sg-plan').textContent=gf.length;
+  document.getElementById('sg-done').textContent=gf.filter(r=>r.status==='done').length;
 }
 
 function refreshSiteFilter(){
