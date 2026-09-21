@@ -827,7 +827,7 @@ function onCouncilRadioChange(){
   document.getElementById('ca-custom-date-wrap').style.display=val==='custom'?'block':'none';
 }
 
-function saveEntry(){
+async function saveEntry(){
   const type=document.getElementById('modal-type').value;
   const eid=parseInt(document.getElementById('modal-eid').value)||0;
   const isJ=type==='joint';
@@ -837,33 +837,96 @@ function saveEntry(){
   const site=document.getElementById('f-site').value.trim();
   const time=document.getElementById('f-time').value||'';
   if(!date||!site){alert('점검일과 사업장명은 필수입니다.');return;}
-  const entry={id:eid||nextId++,date,site,time,status:document.getElementById('f-status').value,note:document.getElementById('f-note').value.trim()};
-  if(isJ){entry.inspector=document.getElementById('f-inspector').value.trim();entry.vendor=document.getElementById('f-vendor').value.trim();entry.jtype=document.getElementById('f-jtype').value;}
-  else if(isC){entry.ctype=document.getElementById('f-ctype').value;entry.cvendor=document.getElementById('f-cvendor').value.trim();entry.cagenda=document.getElementById('f-cagenda').value.trim();}
-  else if(isG){entry.gorg=document.getElementById('f-gorg').value.trim();entry.ginspector=document.getElementById('f-ginspector').value.trim();entry.gtype=document.getElementById('f-gtype').value;}
-  else{entry.dept=document.getElementById('f-dept').value.trim();entry.inspector=document.getElementById('f-pi').value.trim();entry.pcycle=document.getElementById('f-pcycle').value;}
-  const arr=data[type];const idx=arr.findIndex(r=>r.id===eid);
-  if(idx>=0)arr[idx]=entry;else arr.push(entry);
 
-  // 합동점검 → 안전보건협의체 자동 등록
-  let councilAutoRegistered=false;
+  // 입력값은 모달이 닫히기 전에 미리 다 읽어둔다 (DOM이 곧 사라짐)
+  const baseEntry={date,site,time,status:document.getElementById('f-status').value,note:document.getElementById('f-note').value.trim()};
+  if(isJ){baseEntry.inspector=document.getElementById('f-inspector').value.trim();baseEntry.vendor=document.getElementById('f-vendor').value.trim();baseEntry.jtype=document.getElementById('f-jtype').value;}
+  else if(isC){baseEntry.ctype=document.getElementById('f-ctype').value;baseEntry.cvendor=document.getElementById('f-cvendor').value.trim();baseEntry.cagenda=document.getElementById('f-cagenda').value.trim();}
+  else if(isG){baseEntry.gorg=document.getElementById('f-gorg').value.trim();baseEntry.ginspector=document.getElementById('f-ginspector').value.trim();baseEntry.gtype=document.getElementById('f-gtype').value;}
+  else{baseEntry.dept=document.getElementById('f-dept').value.trim();baseEntry.inspector=document.getElementById('f-pi').value.trim();baseEntry.pcycle=document.getElementById('f-pcycle').value;}
+
+  let councilAutoPlan=null;
   if(isJ){
     const caVal=document.querySelector('input[name="council-auto"]:checked').value;
     if(caVal==='same'||caVal==='custom'){
       const cDate=caVal==='custom'?document.getElementById('f-council-date').value:date;
       if(!cDate&&caVal==='custom'){alert('협의체 날짜를 입력해주세요.');return;}
-      data.council.push({id:nextId++,date:cDate||date,site,time,status:'planned',ctype:'정기회의',cvendor:'',cagenda:`합동점검(${fmt(date)}) 연계 안전보건협의체`,note:'합동점검 일정에서 자동 등록됨',autoFromJoint:true});
-      councilAutoRegistered=true;
+      councilAutoPlan={date:cDate||date,site,time};
     }
   }
 
-  const d=new Date(date);calYear=d.getFullYear();calMonth=d.getMonth();
   closeModal();
-  saveData().then(()=>{render();showToast(councilAutoRegistered?'✅ 저장 완료! (협의체 일정도 등록됨)':'✅ 저장 완료!');});
+  showLoading(true);
+  setSyncStatus('saving');
+
+  let savedId=null, councilAutoRegistered=false, ok=false;
+  try{
+    // 1) 저장 직전, 서버의 최신 데이터로 먼저 갱신한다.
+    //    → 그 사이 다른 사람이 등록/수정한 내용이 이번 저장으로 덮어써지지 않도록 보존
+    await loadData();
+
+    // 2) 최신 데이터 위에 이번 변경사항만 적용
+    const arr=data[type];
+    if(eid){
+      const idx=arr.findIndex(r=>r.id===eid);
+      const entry={id:eid,...baseEntry};
+      if(idx>=0)arr[idx]=entry; else arr.push(entry); // 다른 사람이 먼저 지웠으면 새로 추가
+      savedId=eid;
+    }else{
+      const entry={id:nextId++,...baseEntry};
+      arr.push(entry);
+      savedId=entry.id;
+    }
+
+    if(councilAutoPlan){
+      data.council.push({id:nextId++,...councilAutoPlan,status:'planned',ctype:'정기회의',cvendor:'',cagenda:`합동점검(${fmt(date)}) 연계 안전보건협의체`,note:'합동점검 일정에서 자동 등록됨',autoFromJoint:true});
+      councilAutoRegistered=true;
+    }
+
+    const d=new Date(date);calYear=d.getFullYear();calMonth=d.getMonth();
+
+    // 3) 서버에 저장
+    await saveData();
+
+    // 4) 실제로 반영됐는지 재확인 (no-cors라 응답을 못 읽으므로 다시 불러와서 검증)
+    await loadData();
+    ok=data[type].some(r=>r.id===savedId);
+  }catch(e){
+    ok=false;
+  }finally{
+    showLoading(false);
+    render();
+  }
+
+  if(ok){
+    showToast(councilAutoRegistered?'✅ 저장 완료! (협의체 일정도 등록됨)':'✅ 저장 완료!');
+  }else{
+    showToast('⚠️ 저장이 반영되지 않았어요. 네트워크를 확인하고 다시 시도해주세요.',true);
+  }
 }
 
 function editEntry(type,id){const e=data[type].find(r=>r.id===id);if(e)openModal(type,e);}
-function delEntry(type,id){if(!confirm('이 일정을 삭제하시겠습니까?'))return;data[type]=data[type].filter(r=>r.id!==id);saveData().then(()=>{render();showToast('🗑 삭제 완료');});}
+
+async function delEntry(type,id){
+  if(!confirm('이 일정을 삭제하시겠습니까?'))return;
+  showLoading(true);
+  setSyncStatus('saving');
+  let ok=false;
+  try{
+    // 삭제도 저장 직전에 최신 데이터로 갱신 후, 그 위에서 해당 항목만 제거
+    await loadData();
+    data[type]=data[type].filter(r=>r.id!==id);
+    await saveData();
+    await loadData();
+    ok=!data[type].some(r=>r.id===id);
+  }catch(e){
+    ok=false;
+  }finally{
+    showLoading(false);
+    render();
+  }
+  showToast(ok?'🗑 삭제 완료':'⚠️ 삭제가 반영되지 않았어요. 다시 시도해주세요.',!ok);
+}
 
 function renderCouncil(f){
   const tb=document.getElementById('council-body');
