@@ -263,7 +263,16 @@
       <div><h2>순회점검 일정 — 공사/용역 주관부서 입력</h2>
       <div class="section-sub">주기: 건설 2일 1회 / 기타 주 1회 이상 / 해당 부서에서 직접 등록</div></div>
     </div>
-    <button class="btn-add" onclick="openModal('patrol')">+ 일정 추가</button>
+    <div style="display:flex;gap:6px;">
+      <button class="btn-add" style="background:#0f766e;" onclick="openBulkPatrolModal()">+ 날짜 여러개 등록</button>
+      <button class="btn-add" onclick="openModal('patrol')">+ 일정 추가</button>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1.5px solid var(--g2);background:var(--g1);flex-wrap:wrap;">
+    <label style="font-size:12px;font-weight:700;color:var(--g4);">담당자별 조회</label>
+    <select id="patrolInspectorFilter" onchange="onPatrolInspectorChange()" style="border:1.5px solid var(--g2);border-radius:6px;padding:5px 10px;font-size:12px;font-family:inherit;background:var(--wh);outline:none;">
+      <option value="">전체 담당자</option>
+    </select>
   </div>
   <div class="patrol-tab-bar" id="patrol-tab-bar"></div>
   <div class="table-wrap">
@@ -373,7 +382,16 @@
           </div>
         </div>
       </div>
-      <div class="form-group pf"><label>주관부서 *</label><input type="text" id="f-dept" placeholder="예) FM팀, 시설운영팀 등"></div>
+      <div class="form-group pf"><label>주관부서(팀) *</label>
+        <select id="f-dept" onchange="onDeptSelectChange('f-dept','f-dept-custom-wrap')">
+          <option value="Amenity Management Team">Amenity Management Team</option>
+          <option value="Workplace Team">Workplace Team</option>
+          <option value="Safety Management Office">Safety Management Office</option>
+          <option value="PUBG Seongsu Team">PUBG Seongsu Team</option>
+          <option value="__custom__">기타 (직접 입력)</option>
+        </select>
+      </div>
+      <div class="form-group pf" id="f-dept-custom-wrap" style="display:none;"><label>주관부서 직접입력</label><input type="text" id="f-dept-custom" placeholder="팀 이름 입력"></div>
       <div class="form-group pf"><label>점검자</label><input type="text" id="f-pi" placeholder="담당자 이름"></div>
       <div class="form-group pf full"><label>점검 주기</label>
         <select id="f-pcycle"><option>건설 2일 1회</option><option>주 1회</option><option>수시</option><option>기타</option></select>
@@ -394,6 +412,43 @@
     <div class="modal-actions">
       <button class="btn-cancel-modal" onclick="closeModal()">취소</button>
       <button class="btn-save-modal" onclick="saveEntry()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 순회점검 여러 날짜 한번에 등록 모달 -->
+<div class="modal-backdrop" id="bulk-modal-bd">
+  <div class="modal">
+    <h3>순회점검 — 여러 날짜 한번에 등록</h3>
+    <div class="form-grid">
+      <div class="form-group full"><label>사업장명 *</label><input type="text" id="bp-site" placeholder="예) 성수 대륭, 역삼 오피스 등"></div>
+      <div class="form-group"><label>주관부서(팀) *</label>
+        <select id="bp-dept" onchange="onDeptSelectChange('bp-dept','bp-dept-custom-wrap')">
+          <option value="Amenity Management Team">Amenity Management Team</option>
+          <option value="Workplace Team">Workplace Team</option>
+          <option value="Safety Management Office">Safety Management Office</option>
+          <option value="PUBG Seongsu Team">PUBG Seongsu Team</option>
+          <option value="__custom__">기타 (직접 입력)</option>
+        </select>
+      </div>
+      <div class="form-group" id="bp-dept-custom-wrap" style="display:none;"><label>주관부서 직접입력</label><input type="text" id="bp-dept-custom" placeholder="팀 이름 입력"></div>
+      <div class="form-group"><label>점검자</label><input type="text" id="bp-inspector" placeholder="담당자 이름"></div>
+      <div class="form-group"><label>점검 주기</label>
+        <select id="bp-pcycle"><option>건설 2일 1회</option><option selected>주 1회</option><option>수시</option><option>기타</option></select>
+      </div>
+      <div class="form-group"><label>상태 *</label>
+        <select id="bp-status"><option value="planned">예정</option><option value="done">완료</option><option value="pending">보류</option><option value="cancel">취소</option></select>
+      </div>
+      <div class="form-group full"><label>비고 (모든 날짜에 동일하게 적용)</label><textarea id="bp-note" rows="2" placeholder="특이사항 등"></textarea></div>
+      <div class="form-group full">
+        <label>점검일 * — 필요한 만큼 날짜를 추가하세요</label>
+        <div id="bp-date-list" style="margin-top:6px;"></div>
+        <button type="button" onclick="addBulkDateRow()" style="margin-top:4px;border:1.5px dashed var(--g3);background:var(--g1);color:var(--g4);border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">+ 날짜 추가</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel-modal" onclick="closeBulkModal()">취소</button>
+      <button class="btn-save-modal" onclick="saveBulkPatrol()">일괄 등록</button>
     </div>
   </div>
 </div>
@@ -419,6 +474,7 @@ let popupType='',popupId=0;
 let patrolActiveTab='all';
 let patrolPage=1;
 let patrolPageSize=10;
+let patrolInspectorFilter='';
 
 const stMap={planned:['예정','s-planned'],done:['완료','s-done'],pending:['보류','s-pending'],cancel:['취소','s-cancel']};
 
@@ -566,7 +622,8 @@ function renderPatrol(f){
   const tb=document.getElementById('patrol-body');
   const tabBar=document.getElementById('patrol-tab-bar');
   const pagination=document.getElementById('patrol-pagination');
-  const allRows=data.patrol.filter(r=>match(r,f)).sort((a,b)=>a.date.localeCompare(b.date));
+  refreshPatrolInspectorFilter();
+  const allRows=data.patrol.filter(r=>match(r,f)).filter(r=>!patrolInspectorFilter||r.inspector===patrolInspectorFilter).sort((a,b)=>a.date.localeCompare(b.date));
 
   if(!allRows.length){
     tabBar.innerHTML='';
@@ -640,6 +697,20 @@ function renderPatrol(f){
 function setPatrolTab(key){patrolActiveTab=key;patrolPage=1;renderPatrol(getF());}
 function setPatrolPage(p){patrolPage=p;renderPatrol(getF());}
 function setPatrolPageSize(s){patrolPageSize=s;patrolPage=1;renderPatrol(getF());}
+
+function refreshPatrolInspectorFilter(){
+  const sel=document.getElementById('patrolInspectorFilter');
+  if(!sel)return;
+  const names=[...new Set(data.patrol.map(r=>r.inspector).filter(Boolean))].sort();
+  const cur=sel.value;
+  sel.innerHTML='<option value="">전체 담당자</option>'+names.map(n=>`<option value="${n}"${n===cur?' selected':''}>${n}</option>`).join('');
+  sel.value=cur; // 목록이 바뀌어도 선택값 최대한 유지
+}
+function onPatrolInspectorChange(){
+  patrolInspectorFilter=document.getElementById('patrolInspectorFilter').value;
+  patrolPage=1;
+  renderPatrol(getF());
+}
 
 function renderGuidance(f){
   const tb=document.getElementById('guidance-body');
@@ -800,10 +871,12 @@ function openModal(type,entry=null){
   document.querySelectorAll('.pf').forEach(el=>el.style.display=(!isJ&&!isC&&!isG)?'flex':'none');
   document.querySelectorAll('.cf').forEach(el=>el.style.display=isC?'flex':'none');
   document.querySelectorAll('.gf').forEach(el=>el.style.display=isG?'flex':'none');
-  ['f-date','f-time','f-site','f-inspector','f-vendor','f-note','f-dept','f-pi','f-cvendor','f-cagenda','f-council-date','f-gorg','f-ginspector'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f-date','f-time','f-site','f-inspector','f-vendor','f-note','f-dept-custom','f-pi','f-cvendor','f-cagenda','f-council-date','f-gorg','f-ginspector'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('f-status').value='planned';
   document.getElementById('f-jtype').value='정기합동점검';
   document.getElementById('f-pcycle').value='주 1회';
+  document.getElementById('f-dept').value='Amenity Management Team';
+  document.getElementById('f-dept-custom-wrap').style.display='none';
   document.getElementById('ca-none').checked=true;
   document.getElementById('ca-custom-date-wrap').style.display='none';
   if(entry){
@@ -815,11 +888,28 @@ function openModal(type,entry=null){
     if(isJ){document.getElementById('f-inspector').value=entry.inspector||'';document.getElementById('f-vendor').value=entry.vendor||'';document.getElementById('f-jtype').value=entry.jtype||'정기합동점검';}
     else if(isC){document.getElementById('f-ctype').value=entry.ctype||'정기회의';document.getElementById('f-cvendor').value=entry.cvendor||'';document.getElementById('f-cagenda').value=entry.cagenda||'';}
     else if(isG){document.getElementById('f-gorg').value=entry.gorg||'';document.getElementById('f-ginspector').value=entry.ginspector||'';document.getElementById('f-gtype').value=entry.gtype||'정기지도점검';}
-    else{document.getElementById('f-dept').value=entry.dept||'';document.getElementById('f-pi').value=entry.inspector||'';document.getElementById('f-pcycle').value=entry.pcycle||'주 1회';}
+    else{
+      const teamOpts=['Amenity Management Team','Workplace Team','Safety Management Office','PUBG Seongsu Team'];
+      if(entry.dept&&teamOpts.includes(entry.dept)){
+        document.getElementById('f-dept').value=entry.dept;
+        document.getElementById('f-dept-custom-wrap').style.display='none';
+      }else{
+        document.getElementById('f-dept').value='__custom__';
+        document.getElementById('f-dept-custom').value=entry.dept||'';
+        document.getElementById('f-dept-custom-wrap').style.display='flex';
+      }
+      document.getElementById('f-pi').value=entry.inspector||'';document.getElementById('f-pcycle').value=entry.pcycle||'주 1회';
+    }
   }
   document.getElementById('modal-bd').classList.add('open');
 }
 function closeModal(){document.getElementById('modal-bd').classList.remove('open');}
+
+// 팀 선택 드롭다운에서 "기타(직접입력)" 선택 시 직접입력란 표시
+function onDeptSelectChange(selectId,wrapId){
+  const v=document.getElementById(selectId).value;
+  document.getElementById(wrapId).style.display=(v==='__custom__')?'flex':'none';
+}
 
 // 라디오 변경 이벤트 — 모달 열릴 때마다 확실히 동작하도록 직접 onclick 사용
 function onCouncilRadioChange(){
@@ -843,7 +933,12 @@ async function saveEntry(){
   if(isJ){baseEntry.inspector=document.getElementById('f-inspector').value.trim();baseEntry.vendor=document.getElementById('f-vendor').value.trim();baseEntry.jtype=document.getElementById('f-jtype').value;}
   else if(isC){baseEntry.ctype=document.getElementById('f-ctype').value;baseEntry.cvendor=document.getElementById('f-cvendor').value.trim();baseEntry.cagenda=document.getElementById('f-cagenda').value.trim();}
   else if(isG){baseEntry.gorg=document.getElementById('f-gorg').value.trim();baseEntry.ginspector=document.getElementById('f-ginspector').value.trim();baseEntry.gtype=document.getElementById('f-gtype').value;}
-  else{baseEntry.dept=document.getElementById('f-dept').value.trim();baseEntry.inspector=document.getElementById('f-pi').value.trim();baseEntry.pcycle=document.getElementById('f-pcycle').value;}
+  else{
+    const deptSel=document.getElementById('f-dept').value;
+    baseEntry.dept=(deptSel==='__custom__')?document.getElementById('f-dept-custom').value.trim():deptSel;
+    if(!baseEntry.dept){alert('주관부서(팀)를 입력해주세요.');return;}
+    baseEntry.inspector=document.getElementById('f-pi').value.trim();baseEntry.pcycle=document.getElementById('f-pcycle').value;
+  }
 
   let councilAutoPlan=null;
   if(isJ){
@@ -950,7 +1045,74 @@ function renderCouncil(f){
 }
 function render(){const f=getF();renderJoint(f);renderPatrol(f);renderCouncil(f);renderGuidance(f);renderSummary(f);refreshSiteFilter();renderCalendar();}
 
+/* ── 순회점검 여러 날짜 한번에 등록 ── */
+function openBulkPatrolModal(){
+  document.getElementById('bp-site').value='';
+  document.getElementById('bp-dept').value='Amenity Management Team';
+  document.getElementById('bp-dept-custom-wrap').style.display='none';
+  document.getElementById('bp-dept-custom').value='';
+  document.getElementById('bp-inspector').value='';
+  document.getElementById('bp-pcycle').value='주 1회';
+  document.getElementById('bp-status').value='planned';
+  document.getElementById('bp-note').value='';
+  document.getElementById('bp-date-list').innerHTML='';
+  addBulkDateRow();addBulkDateRow();addBulkDateRow();
+  document.getElementById('bulk-modal-bd').classList.add('open');
+}
+function closeBulkModal(){document.getElementById('bulk-modal-bd').classList.remove('open');}
+function addBulkDateRow(){
+  const wrap=document.getElementById('bp-date-list');
+  const row=document.createElement('div');
+  row.className='bulk-date-row';
+  row.style.cssText='display:flex;gap:8px;margin-bottom:6px;align-items:center;';
+  row.innerHTML=`<input type="date" class="bp-date" style="flex:1;border:1.5px solid var(--g2);border-radius:7px;padding:8px 10px;font-size:13px;font-family:inherit;background:var(--wh);outline:none;">
+    <input type="time" class="bp-time" style="width:120px;border:1.5px solid var(--g2);border-radius:7px;padding:8px 10px;font-size:13px;font-family:inherit;background:var(--wh);outline:none;">
+    <button type="button" onclick="this.parentElement.remove()" style="border:none;background:#fee2e2;color:#dc2626;border-radius:6px;padding:7px 11px;cursor:pointer;font-family:inherit;font-weight:700;">✕</button>`;
+  wrap.appendChild(row);
+}
+
+async function saveBulkPatrol(){
+  const site=document.getElementById('bp-site').value.trim();
+  const deptSel=document.getElementById('bp-dept').value;
+  const dept=(deptSel==='__custom__')?document.getElementById('bp-dept-custom').value.trim():deptSel;
+  const inspector=document.getElementById('bp-inspector').value.trim();
+  const pcycle=document.getElementById('bp-pcycle').value;
+  const status=document.getElementById('bp-status').value;
+  const note=document.getElementById('bp-note').value.trim();
+  const dateRows=[...document.querySelectorAll('#bp-date-list .bulk-date-row')];
+  const dates=dateRows.map(row=>({date:row.querySelector('.bp-date').value,time:row.querySelector('.bp-time').value||''})).filter(d=>d.date);
+
+  if(!site){alert('사업장명은 필수입니다.');return;}
+  if(!dept){alert('주관부서(팀)를 입력해주세요.');return;}
+  if(!dates.length){alert('점검일을 최소 1개 이상 입력해주세요.');return;}
+
+  closeBulkModal();
+  showLoading(true);
+  setSyncStatus('saving');
+
+  let ok=false,count=0;
+  try{
+    // 저장 직전 최신 데이터로 갱신 → 다른 사람 등록 내용 보존
+    await loadData();
+    const newEntries=dates.map(d=>({id:nextId++,date:d.date,site,time:d.time,status,note,dept,inspector,pcycle}));
+    data.patrol.push(...newEntries);
+    count=newEntries.length;
+    const addedIds=newEntries.map(e=>e.id);
+
+    await saveData();
+    await loadData();
+    ok=addedIds.every(id=>data.patrol.some(r=>r.id===id));
+  }catch(e){
+    ok=false;
+  }finally{
+    showLoading(false);
+    render();
+  }
+  showToast(ok?`✅ 순회점검 일정 ${count}건 일괄 등록 완료!`:'⚠️ 저장이 반영되지 않았어요. 목록을 확인 후 다시 시도해주세요.',!ok);
+}
+
 document.getElementById('modal-bd').addEventListener('click',e=>{if(e.target===document.getElementById('modal-bd'))closeModal();});
+document.getElementById('bulk-modal-bd').addEventListener('click',e=>{if(e.target===document.getElementById('bulk-modal-bd'))closeBulkModal();});
 document.getElementById('popup-bd').addEventListener('click',e=>{if(e.target===document.getElementById('popup-bd'))closePopup();});
 ['filterYear','filterMonth','filterSite'].forEach(id=>document.getElementById(id).addEventListener('change',render));
 
