@@ -470,7 +470,6 @@
 
 <script>
 let data={joint:[],patrol:[],council:[],guidance:[]};
-let nextId=1;
 let calYear=new Date().getFullYear();
 let calMonth=new Date().getMonth();
 let popupType='',popupId=0;
@@ -484,9 +483,9 @@ let jointPageSize=10;
 
 const stMap={planned:['예정','s-planned'],done:['완료','s-done'],pending:['보류','s-pending'],cancel:['취소','s-cancel']};
 
-// ── Google Sheets 연동 ──
+// ── Google Sheets 연동 (건별 행(row) 단위 API) ──
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxERKBK27SXVNuI96XcGncXmfZ7AGDVIy7YH8CSa9NHpao9tvoJVXW-EjaziZOkruW4IQ/exec';
-let isSaving = false;
+let isBusy = false; // 등록/수정/삭제 처리 중에는 30초 자동 폴링을 건너뛰기 위한 플래그
 let pollTimer = null;
 
 function setSyncStatus(state) {
@@ -518,103 +517,98 @@ function showLoading(show) {
   if (el) el.style.display = show ? 'flex' : 'none';
 }
 
-async function saveData() {
-  if (isSaving) {
-    // 이전 저장 요청이 아직 끝나지 않음 — 호출부에서 처리하도록 에러로 알림
-    // (예전엔 여기서 그냥 return 했는데, 그러면 아무 저장도 안 된 채 조용히 "성공"한 것처럼
-    //  넘어가 버려서 isSaving이 영영 true로 끼어있는 경우 모든 저장이 무반응으로 실패했었음)
-    throw new Error('이미 저장 처리 중입니다.');
-  }
-  isSaving = true;
-  setSyncStatus('saving');
-  showLoading(true);
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15초 타임아웃 — 서버가 응답 없이 계속 멈춰있지 않도록
-  try {
-    const params = new URLSearchParams();
-    params.append('payload', JSON.stringify({ data, nextId }));
-    await fetch(GAS_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      body: params,
-      signal: controller.signal
-    });
-    setSyncStatus('ok');
-  } catch(e) {
-    setSyncStatus('error');
-    throw e; // 호출부(saveEntry/delEntry 등)가 공통 에러 메시지로 처리
-  } finally {
-    clearTimeout(timeoutId);
-    isSaving = false;
-    showLoading(false);
-  }
+// 모든 통신은 GET + JSONP(스크립트 태그)로 처리한다.
+// (Apps Script 웹앱은 POST에 대해 응답 본문을 읽을 수 있는 CORS 헤더를 안정적으로 내려주지 않아서,
+//  기존처럼 no-cors POST로 "쏘기만" 하면 성공/실패/새 id 등을 전혀 알 수 없었다.
+//  GET+JSONP는 원래 조회(doGet)에서 이미 잘 동작하던 방식이라, 등록/수정/삭제도 전부 이 방식으로 통일했다.)
+function gasRequest(params) {
+  return new Promise((resolve, reject) => {
+    const callbackName = '_gasCallback_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+    const script = document.createElement('script');
+    let timer;
+
+    function cleanup() {
+      clearTimeout(timer);
+      delete window[callbackName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[callbackName] = function (result) {
+      cleanup();
+      resolve(result);
+    };
+
+    script.onerror = function () {
+      cleanup();
+      reject(new Error('네트워크 오류'));
+    };
+
+    const qs = new URLSearchParams(Object.assign({}, params, { callback: callbackName, t: Date.now() }));
+    script.src = GAS_URL + '?' + qs.toString();
+    document.head.appendChild(script);
+
+    timer = setTimeout(() => {
+      if (window[callbackName]) {
+        cleanup();
+        reject(new Error('응답 시간이 초과됐습니다.'));
+      }
+    }, 25000); // 25초 타임아웃
+  });
 }
 
 async function loadData() {
   setSyncStatus('loading');
-  return new Promise((resolve) => {
-    const callbackName = '_gasCallback_' + Date.now();
-    const script = document.createElement('script');
-
-    window[callbackName] = function(parsed) {
-      try {
-        data   = parsed.data   || { joint:[], patrol:[], council:[], guidance:[] };
-        if(!data.guidance) data.guidance=[];
-        nextId = parsed.nextId || 1;
-        setSyncStatus('ok');
-      } catch(e) {
-        setSyncStatus('error');
-      } finally {
-        delete window[callbackName];
-        if (script.parentNode) script.parentNode.removeChild(script);
-        resolve();
-      }
-    };
-
-    script.onerror = function() {
-      setSyncStatus('error');
-      delete window[callbackName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-      resolve();
-    };
-
-    script.src = GAS_URL + '?callback=' + callbackName + '&t=' + Date.now();
-    document.head.appendChild(script);
-
-    // 10초 타임아웃
-    setTimeout(() => {
-      if (window[callbackName]) {
-        setSyncStatus('error');
-        delete window[callbackName];
-        if (script.parentNode) script.parentNode.removeChild(script);
-        resolve();
-      }
-    }, 10000);
-  });
+  try {
+    const result = await gasRequest({ action: 'list' });
+    data = (result && result.data) || { joint: [], patrol: [], council: [], guidance: [] };
+    if (!data.guidance) data.guidance = [];
+    setSyncStatus('ok');
+  } catch (e) {
+    setSyncStatus('error');
+  }
 }
 
-function sleep(ms){return new Promise(res=>setTimeout(res,ms));}
-
-// 저장 직후 서버 반영을 확인할 때, 전파 지연으로 인한 오탐을 줄이기 위해
-// 바로 실패 처리하지 않고 짧게 기다렸다가 몇 번 더 재확인한다.
-async function verifyAfterSave(checkFn, tries=2, delayMs=1200){
-  for(let i=0;i<tries;i++){
-    await loadData();
-    if(checkFn()) return true;
-    if(i<tries-1) await sleep(delayMs);
-  }
-  return false;
+// ── 건별 등록/수정/삭제 — 전체 데이터를 다시 쓰지 않고, 서버에서 해당 행(row)만 변경한다.
+//    실패 시 예외를 던지므로 호출부(saveEntry 등)의 try/catch에서 처리한다.
+async function addRecord(type, fields) {
+  const res = await gasRequest({ action: 'add', type, payload: JSON.stringify(fields) });
+  if (!res || !res.success) throw new Error((res && res.error) || '등록 실패');
+  return res; // { success, id, record }
+}
+async function updateRecord(type, id, fields) {
+  const res = await gasRequest({ action: 'update', type, id, payload: JSON.stringify(fields) });
+  if (!res || !res.success) throw new Error((res && res.error) || '수정 실패');
+  return res;
+}
+async function deleteRecord(type, id) {
+  const res = await gasRequest({ action: 'delete', type, id });
+  if (!res || !res.success) throw new Error((res && res.error) || '삭제 실패');
+  return res;
+}
+async function bulkAddRecords(type, items) {
+  const res = await gasRequest({ action: 'bulkAdd', type, payload: JSON.stringify(items) });
+  if (!res || !res.success) throw new Error((res && res.error) || '일괄 등록 실패');
+  return res; // { success, ids: [...] }
+}
+async function resetAllRecords() {
+  const res = await gasRequest({ action: 'reset' });
+  if (!res || !res.success) throw new Error((res && res.error) || '초기화 실패');
+  return res;
 }
 
 async function resetData() {
   if (!confirm('모든 일정 데이터를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
-  data = { joint:[], patrol:[], council:[], guidance:[] };
-  nextId = 1;
+  isBusy = true;
+  showLoading(true);
   try{
-    await saveData();
+    await resetAllRecords();
+    data = { joint:[], patrol:[], council:[], guidance:[] };
     showToast('🗑 초기화 완료');
   }catch(e){
     showToast('⚠️ 초기화가 반영되지 않았어요. 다시 시도해주세요.', true);
+  }finally{
+    isBusy = false;
+    showLoading(false);
   }
   render();
 }
@@ -623,7 +617,7 @@ async function resetData() {
 function startPolling() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
-    if (isSaving) return;
+    if (isBusy) return;
     await loadData();
     render();
   }, 30000);
@@ -1043,44 +1037,39 @@ async function saveEntry(){
   }
 
   closeModal();
+  isBusy = true;
   showLoading(true);
   setSyncStatus('saving');
 
-  let savedId=null, councilAutoRegistered=false, ok=false;
+  let councilAutoRegistered=false, ok=false;
   try{
-    // 1) 저장 직전, 서버의 최신 데이터로 먼저 갱신한다.
-    //    → 그 사이 다른 사람이 등록/수정한 내용이 이번 저장으로 덮어써지지 않도록 보존
-    await loadData();
-
-    // 2) 최신 데이터 위에 이번 변경사항만 적용
-    const arr=data[type];
+    // 서버에서 해당 건(row)만 등록/수정 — 전체 데이터를 읽거나 다시 쓰지 않으므로
+    // 다른 사람이 동시에 등록한 내용과 충돌/덮어쓰기 될 일이 없다.
     if(eid){
-      const idx=arr.findIndex(r=>r.id===eid);
+      await updateRecord(type, eid, baseEntry);
+      const arr=data[type];const idx=arr.findIndex(r=>r.id===eid);
       const entry={id:eid,...baseEntry};
-      if(idx>=0)arr[idx]=entry; else arr.push(entry); // 다른 사람이 먼저 지웠으면 새로 추가
-      savedId=eid;
+      if(idx>=0)arr[idx]=entry; else arr.push(entry);
     }else{
-      const entry={id:nextId++,...baseEntry};
-      arr.push(entry);
-      savedId=entry.id;
+      const res=await addRecord(type, baseEntry);
+      data[type].push({id:res.id,...baseEntry});
     }
 
     if(councilAutoPlan){
-      data.council.push({id:nextId++,...councilAutoPlan,status:'planned',ctype:'정기회의',cvendor:'',cagenda:`합동점검(${fmt(date)}) 연계 안전보건협의체`,note:'합동점검 일정에서 자동 등록됨',autoFromJoint:true});
+      const cFields={...councilAutoPlan,status:'planned',ctype:'정기회의',cvendor:'',cagenda:`합동점검(${fmt(date)}) 연계 안전보건협의체`,note:'합동점검 일정에서 자동 등록됨',autoFromJoint:true};
+      const cRes=await addRecord('council', cFields);
+      data.council.push({id:cRes.id,...cFields});
       councilAutoRegistered=true;
     }
 
     const d=new Date(date);calYear=d.getFullYear();calMonth=d.getMonth();
-
-    // 3) 서버에 저장
-    await saveData();
-
-    // 4) 실제로 반영됐는지 재확인 (no-cors라 응답을 못 읽으므로 다시 불러와서 검증)
-    //    전파 지연으로 바로 실패 처리하지 않도록 몇 번 재시도
-    ok=await verifyAfterSave(()=>data[type].some(r=>r.id===savedId));
+    ok=true;
+    setSyncStatus('ok');
   }catch(e){
     ok=false;
+    setSyncStatus('error');
   }finally{
+    isBusy = false;
     showLoading(false);
     render();
   }
@@ -1096,18 +1085,20 @@ function editEntry(type,id){const e=data[type].find(r=>r.id===id);if(e)openModal
 
 async function delEntry(type,id){
   if(!confirm('이 일정을 삭제하시겠습니까?'))return;
+  isBusy = true;
   showLoading(true);
   setSyncStatus('saving');
   let ok=false;
   try{
-    // 삭제도 저장 직전에 최신 데이터로 갱신 후, 그 위에서 해당 항목만 제거
-    await loadData();
+    await deleteRecord(type, id);
     data[type]=data[type].filter(r=>r.id!==id);
-    await saveData();
-    ok=await verifyAfterSave(()=>!data[type].some(r=>r.id===id));
+    ok=true;
+    setSyncStatus('ok');
   }catch(e){
     ok=false;
+    setSyncStatus('error');
   }finally{
+    isBusy = false;
     showLoading(false);
     render();
   }
@@ -1178,23 +1169,23 @@ async function saveBulkPatrol(){
   if(!dates.length){alert('점검일을 최소 1개 이상 입력해주세요.');return;}
 
   closeBulkModal();
+  isBusy = true;
   showLoading(true);
   setSyncStatus('saving');
 
   let ok=false,count=0;
   try{
-    // 저장 직전 최신 데이터로 갱신 → 다른 사람 등록 내용 보존
-    await loadData();
-    const newEntries=dates.map(d=>({id:nextId++,date:d.date,site,time:d.time,status,note,dept,inspector,pcycle}));
-    data.patrol.push(...newEntries);
-    count=newEntries.length;
-    const addedIds=newEntries.map(e=>e.id);
-
-    await saveData();
-    ok=await verifyAfterSave(()=>addedIds.every(id=>data.patrol.some(r=>r.id===id)));
+    const items=dates.map(d=>({date:d.date,time:d.time,site,status,note,dept,inspector,pcycle}));
+    const res=await bulkAddRecords('patrol', items);
+    count=res.ids.length;
+    res.ids.forEach((id,i)=>{ data.patrol.push({id,...items[i]}); });
+    ok=true;
+    setSyncStatus('ok');
   }catch(e){
     ok=false;
+    setSyncStatus('error');
   }finally{
+    isBusy = false;
     showLoading(false);
     render();
   }
